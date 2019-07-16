@@ -9,15 +9,15 @@ Mojito does this by cherry-picking two types of events:
 
 Then, our reporting logic performs the attribution based on users' event sequences:
 
-| Time  | A subject's event stream  | Event counted in reports? |
-|---|---|---|---|
-| 12:01  | Conversion | ❗ Converted, but before exposure |
-| 12:02  | Exposure | ✅ First exposure |
-| 12:03  | Conversion | ✅ Converted |
-| 12:04  | Exposure | ❌ |
-| 12:05  | Conversion | ✅ Converted again *(if measuring multiple goal hits)* |
+| Time  | A subject's event stream | Event counted in reports?                             |
+|-------|--------------------------|-------------------------------------------------------|
+| 12:01 | Conversion               | ❗ Converted *(but before exposure / not counted)*     |
+| 12:02 | Exposure                 | ✅ First exposure                                      |
+| 12:03 | Conversion               | ✅ Converted                                           |
+| 12:04 | Exposure                 | ❌                                                     |
+| 12:05 | Conversion               | ✅ Converted again *(if measuring multiple goal hits)* |
 
-Think "event sequencing" in GA's advanced segments... but with better assurances of when events arrived.
+Think "event sequencing" in GA's advanced segments... but with better assurances of when events arrived via Snowplow.
 
 ## Table naming conventions
 
