@@ -37,5 +37,4 @@ AS (
         conversion_time
 );
 
-GRANT SELECT ON mojito.mintmetrics_conversions_usercookie TO mojito_reports;
-
+GRANT SELECT ON mojito.mintmetrics_conversions_usercookie TO username;
