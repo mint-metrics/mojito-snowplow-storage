@@ -1,29 +1,63 @@
 # Mojito Snowplow/Redshift data models
 
-For measuring causality, we only count conversions taking place **after** a user is bucketed into a test. Tracking events before exposure to a treatment only confounds the results.
+For measuring causality, we only count conversions taking place **after** a user is bucketed into a test. Tracking events before exposure to a variant only confounds the results.
 
 Mojito does this by cherry-picking two types of events:
 
-1. **First exposures**: Each subject's first exposure to a treatment
-2. **All conversions**: Every distinct conversion event a subject triggers
+1. **[First exposures](base_exposures.sql)**: Each subject's first exposure to a variant
+2. **[All conversions](conversions.sql)**: Every distinct conversion event a subject triggers
 
-Using these two events, we can effectively attribute conversions back to the first exposure of each subject.
+Then, our reporting logic performs the attribution based on users' event sequences:
 
-| Time  | Subject's events  | Event counted in reports? |
-|---|---|---|---|
-| 12:01  | Conversion | ❌ | 
-| 12:02  | Exposure | ✅ First exposure | 
-| 12:03  | Conversion | ✅ Converted | 
-| 12:04  | Exposure | ❌ | 
-| 12:05  | Conversion | ✅ Converted again *(if measuring multiple goal hits)* | 
+| Time  | A subject's event stream | Event counted in reports?                             |
+|-------|--------------------------|-------------------------------------------------------|
+| 12:01 | Conversion               | ❗ Converted *(but before exposure / not counted)*     |
+| 12:02 | Exposure                 | ✅ First exposure                                      |
+| 12:03 | Conversion               | ✅ Converted                                           |
+| 12:04 | Exposure                 | ❌                                                     |
+| 12:05 | Conversion               | ✅ Converted again *(if measuring multiple goal hits)* |
 
-Think "event sequencing" in GA's advanced segments... but with better assurances of when events arrived.
+Think "event sequencing" in GA's advanced segments... but with better assurances of when events arrived via Snowplow.
 
-## Exposure tables
+## Table naming conventions
 
-Exposure events occur when subjects are bucketed or exposed. We take the timestamp of each subjects' first exposure through base_exposures.sql, like so:
+Mint Metrics uses a multi-tenanted solution becuase we service multiple clients (`client`). At the same time, we also support different units of assignment (`unit`). These two factors go into naming our tables for access within reports:
 
-```{sql}
+ - **Exposure tables**: mojito.exposures_`unit`
+    - usercookie: Snowplow's domain user ID / first party cookie ID *(Recommended)*
+    - sessioncookie: Snowplow's domain session ID cookie
+    - userfingerprint: Snowplow's user fingerprint and the user IP address combined into one field
+ - **Conversion tables**: mojito.`client`_conversions_`unit`
+    - e.g. 'mintmetrics' or whatever you use for the app_id
+
+### Example
+
+If the client was Mint Metrics and we were running a test assigned at the session-level, we would have to populate two tables for reports:
+
+1. `mojito.exposures_sessioncookie`: For exposure tracking
+2. `mojito.mintmetrics_conversions_sessioncookie`: For conversion data
+
+## Setting up your data models
+
+### 1. Create and define your mojito schema
+
+This is the schema we use to store all Mojito report tables in. It also makes it easy to lock down access for your reporting user:
+
+```sql{}
+CREATE SCHEMA IF NOT EXISTS mojito;
+GRANT USAGE ON SCHEMA TO username;
+```
+
+### 2. Define your exposure tables
+
+Take [the `base_exposures.sql` example](base_exposures.sql) and adapt it to your requirements, paying close attention to:
+
+ - Lines 1 and 18: Unit (if you're selecting a unit other than the first-party cookie ID)
+ - Line 3: In case you want to override your app ID and it's not relevant to you. E.g. you could replace it with "company_name" instead.
+ - Line 20-29: Bot filtering - you may have your own method for filtering bots out of your dataset.
+ - [Table naming conventions as described above](#table-naming-conventions) (reports reference tables regularly and they need consistency)
+
+```sql{3,4,18,20-29}
 -- Exposures table
 SELECT
 	domain_userid AS subject,
@@ -52,37 +86,20 @@ WHERE e.event_name = 'mojito_exposure'
 GROUP BY 1, 2, 3, 4
 ```
 
-Next, we filter duplicate exposures (which may be due to cookie churn or internal traffic reaching reports):
-
-```
-  -- Filter users who may be a part of both treatments
-  dupes as (
-    select subject, wave_id, client_id
-    from exposures
-    group by 1, 2, 3
-    having count(recipe_name) = 1
-  )
-
-  select x.* 
-  from exposures x
-  inner join dupes d                  
-    on x.subject = d.subject 
-      and x.wave_id = d.wave_id 
-      and x.client_id = d.client_id
-  order by client_id, wave_id, exposure_time
-```
-
-We load conversions into different tables depending on the **test subject's unit of assignment**. At Mint Metrics we support:
-
- - **usercookie**: Snowplow's first-party user cookie (```domain_userid```), the default & recommended unit of assignment.
- - **userfingerprint**: A combination of the Snowplow Browser fingerprint (```user_fingerprint```) & user IP address (```user_ipaddress```), useful for passive cross-domain tracking
+Again, remember to pay close attention to the naming of your tables.
 
 
-## Conversion tables
+### 3. Define your conversion tables & conversion points
 
-Then, from a table of conversion events, we grab the first "conversion" after exposure:
+Using [the `conversions.sql` example](conversions.sql), adapt it to your requirements:
 
-```{sql}
+ - Line 2 & 22: Configure your subject
+ - Line 4-11: Use CASE WHEN to categorise your events and classify them for easy access in reports - this means we can select and match conversion events on one field with regex in our reports.
+ - Line 20: Define your app ID in the WHERE clause or pull the data from a particular table or schema
+ - Line 23: Ensure all your pertinent conversion events are selected in this condition
+ - [Remember the naming conventions for tables](#table-naming-conventions) when Creating the table inside the Mojito Schema
+
+```sql{2, 4-11, 20, 22, 23}
     SELECT
         domain_userid AS subject,
         -- This is the value for the goal
@@ -113,48 +130,10 @@ Then, from a table of conversion events, we grab the first "conversion" after ex
     ORDER BY conversion_time
 ```
 
-We deduplicate events by their transaction ID (if available) or by their Snowplow event ID.
 
-This enables us to quickly join subjects' conversions onto their first initial exposures during analysis. 
+### 4. Adding data modelling steps to Snowplow SQL Runner
 
-## Error tracking & attribution
-
-For reporting on errors, you'll need to build another table that should give you plenty of huicy context to find and fix your errors:
-
-```{sql}
-SELECT
-	app_id as client_id,
-	domain_userid as subject,
-	wave_id,
-	recipe_name as component,
-	recipe_error as error,
-	page_urlhost,
-	page_urlpath,
-	ua.os_family,
-	ua.device_family,
-	ua.useragent_family,
-	ua.useragent_major,
-	derived_tstamp
-FROM atomic.events e
-INNER JOIN atomic.io_mintmetrics_mojito_recipe_failure_1 f
-	ON e.event_id = f.root_id
-		and e.collector_tstamp = f.root_tstamp
-		and e.event_name = 'recipe_failure'
-LEFT JOIN atomic.com_snowplowanalytics_snowplow_ua_parser_context_1 ua
-	ON f.root_id = ua.root_id 
-		and f.root_tstamp = ua.root_tstamp
-```
-
-We use the User Agent Parser library in Snowplow's enrichments to classify devices' useragents. Page URLs, treatment (components) and error messages provide us with heaps of context for debugging.
-
-And this table makes for useful Superset dashboards too:
-
-![Error reporting table](errors-superset.png)
-
-
-## Adding data modelling steps to Snowplow SQL Runner
-
-To update reports after each Snowplow Enrichment, we recommend using Snowplow's very own SQL Runner. You'll just need two steps to run, like so:
+Finally, you'll want to rebuild these tables as fresh data loads after each batch.:
 
 ```{yaml}
 # ...
@@ -178,9 +157,49 @@ steps:
 
 ```
 
-# Get involved
 
-We'll need help supporting other Snowplow Storage Targets, like Big Query, Snowflake and Azure's Data Lake product.
+## Error tracking & attribution
+
+NB. This is set to change shortly as we lock down the requirements for this feature in reports.
+
+For error reporting, you'll need to build another table that should give you plenty of juicy context to find and fix errors:
+
+```sql{}
+SELECT
+    app_id as client_id,
+    domain_userid as subject,
+    wave_id,
+    component,
+    error,
+    page_urlhost,
+    page_urlpath,
+    ua.os_family,
+    ua.device_family,
+    ua.useragent_family,
+    ua.useragent_major,
+    derived_tstamp
+FROM atomic.events e
+INNER JOIN atomic.io_mintmetrics_mojito_mojito_failure_1 f
+    ON e.event_id = f.root_id
+        and e.collector_tstamp = f.root_tstamp
+        and e.event_name = 'mojito_failure'
+LEFT JOIN atomic.com_snowplowanalytics_snowplow_ua_parser_context_1 ua
+    ON f.root_id = ua.root_id 
+        and f.root_tstamp = ua.root_tstamp
+```
+
+We use the User Agent Parser enrichment in Snowplow to classify useragents. Page URLs, variant (components) and error messages also provide heaps of context for debugging.
+
+This table makes for useful Superset dashboards too:
+
+![Error reporting table](errors-superset.png)
+
+Whilst this event is optional to track and collect, we highly recommend it since [error tracking provides you with better assurances when you run your experiments](https://mintmetrics.io/experiments/why-you-need-error-tracking-handling-in-your-split-tests/).
+
+
+## Get involved
+
+We'll need help supporting other Snowplow Storage Targets, like Big Query and Azure's Data Lake product (eventually).
 
 Feel free to reach out to us:
 

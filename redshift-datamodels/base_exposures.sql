@@ -45,3 +45,5 @@ AS (
       and x.client_id = d.client_id
   order by client_id, wave_id, exposure_time
 );
+
+GRANT SELECT ON mojito.exposures_usercookie TO username;
