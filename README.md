@@ -5,7 +5,7 @@ Simple experiment events & data models to power analysis in [Mojito R Analytics]
 There are two parts to this repository:
 
 1. **Events** (```./events```): Self-describing events emitted from experiments
-2. **Data models** ```./redshift-datamodels```: SQL data models for attributing ```conversions``` back to treatment ```exposures``` in reporting
+2. **Data models** ```./redshift-datamodels```: SQL data models for attributing ```conversions``` back to variant ```exposures``` in reporting
 
 
 ## Prerequisites
@@ -33,7 +33,7 @@ There are two parts to this repository:
 For most experiment reports, we're interested in just three events:
 
 1. Exposures (or assignments)
-2. Failures (errors in experiment treatments, shared code or triggers)
+2. Failures (errors in experiment variants, shared code or triggers)
 3. Conversions (e.g. clicks, page views, purchases or leads)
 
 ### 1. Recipe exposures (assignment)
@@ -53,7 +53,7 @@ Mojito recipe exposures collect just:
 
 ### 2. Recipe failures (error tracking)
 
-In complex builds, it's hard to avoid errors firing from experiument treatments (such as obscure browsers, products with unusual features or deployments breaking tests mid-way through). Errors can mean the difference between your treatment working or breaking. 
+In complex builds, it's hard to avoid errors firing from experiment variants (such as obscure browsers, products with unusual features or deployments breaking tests mid-way through). Errors can mean the difference between your treatment working or breaking. 
 
 In any case, by tracking this data into experiment reports lets you keep abreast of issues and even helps you fix them.
 

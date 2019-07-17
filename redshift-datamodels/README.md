@@ -1,10 +1,10 @@
 # Mojito Snowplow/Redshift data models
 
-For measuring causality, we only count conversions taking place **after** a user is bucketed into a test. Tracking events before exposure to a treatment only confounds the results.
+For measuring causality, we only count conversions taking place **after** a user is bucketed into a test. Tracking events before exposure to a variant only confounds the results.
 
 Mojito does this by cherry-picking two types of events:
 
-1. **[First exposures](base_exposures.sql)**: Each subject's first exposure to a treatment
+1. **[First exposures](base_exposures.sql)**: Each subject's first exposure to a variant
 2. **[All conversions](conversions.sql)**: Every distinct conversion event a subject triggers
 
 Then, our reporting logic performs the attribution based on users' event sequences:
@@ -32,7 +32,7 @@ Mint Metrics uses a multi-tenanted solution becuase we service multiple clients 
 
 ### Example
 
-Therefore if the client was Mint Metrics and we were running a test assigned at the session-level, we would have to populate two tables for reports:
+If the client was Mint Metrics and we were running a test assigned at the session-level, we would have to populate two tables for reports:
 
 1. `mojito.exposures_sessioncookie`: For exposure tracking
 2. `mojito.mintmetrics_conversions_sessioncookie`: For conversion data
@@ -50,12 +50,12 @@ GRANT USAGE ON SCHEMA TO username;
 
 ### 2. Define your exposure tables
 
-Take [the `base_exposures.sql` example](base_exposures.sql) and adapt it to your rquirements, paying close attention to:
+Take [the `base_exposures.sql` example](base_exposures.sql) and adapt it to your requirements, paying close attention to:
 
  - Lines 1 and 18: Unit (if you're selecting a unit other than the first-party cookie ID)
  - Line 3: In case you want to override your app ID and it's not relevant to you. E.g. you could replace it with "company_name" instead.
  - Line 20-29: Bot filtering - you may have your own method for filtering bots out of your dataset.
- - [Table naming conventions as descibed above](#table-naming-conventions) (reports reference tables regularly and they need consistency)
+ - [Table naming conventions as described above](#table-naming-conventions) (reports reference tables regularly and they need consistency)
 
 ```sql{3,4,18,20-29}
 -- Exposures table
@@ -188,7 +188,7 @@ LEFT JOIN atomic.com_snowplowanalytics_snowplow_ua_parser_context_1 ua
         and f.root_tstamp = ua.root_tstamp
 ```
 
-We use the User Agent Parser enrichment in Snowplow to classify useragents. Page URLs, treatment (components) and error messages also provide heaps of context for debugging.
+We use the User Agent Parser enrichment in Snowplow to classify useragents. Page URLs, variant (components) and error messages also provide heaps of context for debugging.
 
 This table makes for useful Superset dashboards too:
 
