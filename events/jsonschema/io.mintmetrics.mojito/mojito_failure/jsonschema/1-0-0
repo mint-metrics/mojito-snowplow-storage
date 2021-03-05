@@ -10,7 +10,7 @@
   "type" : "object",
   "properties" : {
     "waveId" : {
-      "description" : "A canonical ID of the test used in cookies and in experiment in reports",
+      "description" : "A canonical ID of the test used in cookies and in experiment reports",
       "type" : "string",
       "maxLength" : 255
     },
