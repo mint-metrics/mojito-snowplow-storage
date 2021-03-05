@@ -1,6 +1,6 @@
 {
   "$schema" : "http://iglucentral.com/schemas/com.snowplowanalytics.self-desc/schema/jsonschema/1-0-0#",
-  "description" : "In complex builds, it's hard to avoid errors firing from experiment variants (such as obscure browsers, products with unusual features or deployments breaking tests mid-way through). Errors can mean the difference between your treatment working or breaking.",
+  "description" : "Schema for a Mojito failure event",
   "self" : {
     "vendor" : "io.mintmetrics.mojito",
     "name" : "mojito_failure",
