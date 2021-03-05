@@ -1,5 +1,6 @@
 {
   "$schema" : "http://iglucentral.com/schemas/com.snowplowanalytics.self-desc/schema/jsonschema/1-0-0#",
+  "description" : "These events are tracked approximately when users get assigned or bucketed into a test group. We use this to establish the time and group each user is in, so any future conversions can be attributed to the test.",
   "self" : {
     "vendor" : "io.mintmetrics.mojito",
     "name" : "mojito_exposure",
@@ -9,13 +10,19 @@
   "type" : "object",
   "properties" : {
     "waveId" : {
-      "type" : "string"
+      "description" : "A canonical ID of the test used in cookies and in experiment in reports",
+      "type" : "string",
+      "maxLength" : 255
     },
     "waveName" : {
-      "type" : "string"
+      "description" : "The \"pretty\" name of an experiment for high-level reports usability",
+      "type" : "string",
+      "maxLength" : 255
     },
     "recipe" : {
-      "type" : "string"
+      "description" : "The \"pretty\" name of a recipe that's also used in reports",
+      "type" : "string",
+      "maxLength" : 255
     }
   },
   "additionalProperties" : false
